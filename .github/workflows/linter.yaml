@@ -1,0 +1,100 @@
+name: lint-test
+
+on:
+  workflow_call:
+    secrets:
+      token:
+        required: false
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-18.04
+    name: clang-format-lint
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      - name: Download config
+        run: |
+          wget https://raw.githubusercontent.com/Tacha-S/.github/main/.clang-format
+      # - name: copy file
+      #   uses: canastro/copy-file-action@7ddff6fc153a2ea2cd0fb88ed9750544c051e399
+      #   with:
+      #     source: ".github/.clang-format"
+      #     target: ".clang-format"
+      - uses: DoozyX/clang-format-lint-action@v0.8
+        with:
+          source: "."
+          exclude: ""
+          extensions: "h,cpp,hpp"
+          clangFormatVersion: 8
+          style: file
+  flake8-lint:
+    runs-on: ubuntu-18.04
+    name: flake8-lint
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      - name: Set up Python environment
+        uses: actions/setup-python@v1
+        with:
+          python-version: "2.7"
+      - name: flake8 Lint
+        uses: py-actions/flake8@v1
+        with:
+          ignore: "F401,W503"
+          #   exclude: "src/ignoreme.py"
+          max-line-length: "119"
+          #   path: "src"
+  cmake-format:
+    runs-on: ubuntu-18.04
+    name: cmake-format
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      # - name: Format CMake files
+      #   id: cmake-format
+      #   uses: PuneetMatharu/cmake-format-lint-action@868082b20873d65687e64a4807ea342d1844c4c7
+      #   with:
+      #     args: --config-files .github/.cmake-format --check
+      - name: Download config
+        run: |
+          wget https://raw.githubusercontent.com/Tacha-S/.github/main/.cmake-format
+      - name: Format CMake files
+        run: |
+          pip3 install cmake-format
+          find . -name '*.cmake' -o -name 'CMakeLists.txt' -print0 |\
+          xargs -0 -I {} cmake-format -c .cmake-format --check {}
+  xmllint:
+    runs-on: ubuntu-18.04
+    name: xmllint
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      - name: Lint xml files
+        run: |
+          sudo apt install libxml2-utils
+          wget https://gist.githubusercontent.com/nalt/dfa2abc9d2e3ae4feb82ca5608090387/raw/roslaunch.xsd
+          find . -type f -regextype posix-egrep -regex ".*\/launch\/.*\.(launch|xml)$" -print0 |\
+          xargs -0 -I {} -P8 bash -c "xmllint --schema roslaunch.xsd --format {} |\
+          diff -B {} -"
+          wget http://download.ros.org/schema/package_format3.xsd
+          find . -type f -regextype posix-egrep -regex ".*package.xml" -print0 |\
+          xargs -0 -I {} -P8 bash -c "xmllint --schema package_format3.xsd --format {} |\
+          diff -B {} -"
+  yamllint:
+    runs-on: ubuntu-18.04
+    name: yamllint
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      - name: Download config
+        run: |
+          wget https://raw.githubusercontent.com/Tacha-S/.github/main/.yamllint
+      - name: Lint yaml files
+        uses: karancode/yamllint-github-action@dd59165b84d90d37fc919c3c7dd84c7e37cd6bfb
+        with:
+          yamllint_config_filepath: .yamllint
+          yamllint_strict: false
+          yamllint_comment: true
+        env:
+          GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
