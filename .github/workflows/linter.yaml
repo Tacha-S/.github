@@ -1,6 +1,9 @@
 name: lint-test
 
 on:
+  push:
+    paths:
+      - '**.py'
   workflow_call:
     secrets:
       token:
