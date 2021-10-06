@@ -31,8 +31,8 @@ jobs:
   #         extensions: "h,cpp,hpp"
   #         clangFormatVersion: 8
   #         style: file
-  flake8-lint:
-    name: runner / flake8
+  python-lint:
+    name: runner / python
     runs-on: ubuntu-18.04
     steps:
       - name: Check out source repository
@@ -40,7 +40,17 @@ jobs:
       - name: Set up Python environment
         uses: actions/setup-python@v2
         with:
-          python-version: "3.8"
+          python-version: "2.7"
+      - name: autopep8 format
+        uses: peter-evans/autopep8@v1
+        with:
+          args: --recursive --in-place --aggressive --aggressive --max-line-length 119 .
+      - name: suggester / autopep8
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: autopep8
+          filter_mode: file
+          fail_on_error: true
       - name: flake8 Lint
         uses: reviewdog/action-flake8@v3
         with:
