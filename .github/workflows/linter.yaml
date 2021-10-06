@@ -121,16 +121,30 @@ jobs:
         uses: actions/checkout@v2
       - name: Setup reviewdog
         uses: reviewdog/action-setup@v1
+      - name: xmllint format
+        run: |
+          sudo apt install libxml2-utils
+          find . -type f -regextype posix-egrep -regex "(.*\/launch\/.*\.(launch|xml)|.*package.xml)$" -print0 |\
+          xargs -0 -I {} -P8 bash -c "xmllint --format {} |\
+          diff -B {} - |\
+          patch {}"
+      - name: suggester / xmllint
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: xmllint
+          filter_mode: file
+          fail_on_error: true
       - name: xmllint roslaunch
+        if: always()
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
-          sudo apt install libxml2-utils
           wget https://gist.githubusercontent.com/nalt/dfa2abc9d2e3ae4feb82ca5608090387/raw/roslaunch.xsd
           files=`find . -type f -regextype posix-egrep -regex ".*\/launch\/.*\.(launch|xml)$"`
           xmllint --noout --schema roslaunch.xsd ${files} 2>&1 1>/dev/null |\
           reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
       - name: xmllint package.xml
+        if: always()
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
