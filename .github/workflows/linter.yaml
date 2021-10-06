@@ -53,6 +53,7 @@ jobs:
           filter_mode: file
           fail_on_error: true
       - name: flake8 Lint
+        if: always()
         uses: reviewdog/action-flake8@v3
         with:
           reporter: github-pr-review
