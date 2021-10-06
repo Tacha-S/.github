@@ -8,15 +8,17 @@ jobs:
     name: changed-file-filter
     runs-on: ubuntu-18.04
     outputs:
-      cpp: ${{ steps.changes.outputs.cc }}
+      cpp: ${{ steps.changes.outputs.cpp }}
       python: ${{ steps.changes.outputs.python }}
       cmake: ${{ steps.changes.outputs.cmake }}
       yaml: ${{ steps.changes.outputs.yaml }}
       xml: ${{ steps.changes.outputs.xml }}
     steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
       - name: changed-file-filter
         id: changes
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@b2feaf19c27470162a626bd6fa8438ae5b263721 #v2.10.2
         with:
           filters: |
             cpp:
