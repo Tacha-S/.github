@@ -60,44 +60,29 @@ jobs:
           filter_mode: file
           fail_on_error: true
           flake8_args: --ignore=F401,W503 --max-line-length 119
-  # cmake-format:
-  #   runs-on: ubuntu-18.04
-  #   name: cmake-format
-  #   steps:
-  #     - name: Check out source repository
-  #       uses: actions/checkout@v2
-  #     # - name: Format CMake files
-  #     #   id: cmake-format
-  #     #   uses: PuneetMatharu/cmake-format-lint-action@868082b20873d65687e64a4807ea342d1844c4c7
-  #     #   with:
-  #     #     args: --config-files .github/.cmake-format --check
-  #     - name: Download config
-  #       run: |
-  #         wget https://raw.githubusercontent.com/Tacha-S/.github/main/.cmake-format
-  #     - name: Format CMake files
-  #       run: |
-  #         pip3 install cmake-format
-  #         find . -name '*.cmake' -o -name 'CMakeLists.txt' -print0 |\
-  #         xargs -0 -I {} cmake-format -c .cmake-format --check {}
-  # xmllint:
-  #   runs-on: ubuntu-18.04
-  #   name: xmllint
-  #   steps:
-  #     - name: Check out source repository
-  #       uses: actions/checkout@v2
-  #     - name: Format xml
-
-  #     - name: Lint xml files
-  #       run: |
-  #         sudo apt install libxml2-utils
-  #         wget https://gist.githubusercontent.com/nalt/dfa2abc9d2e3ae4feb82ca5608090387/raw/roslaunch.xsd
-  #         find . -type f -regextype posix-egrep -regex ".*\/launch\/.*\.(launch|xml)$" -print0 |\
-  #         xargs -0 -I {} -P8 bash -c "xmllint --schema roslaunch.xsd --format {} |\
-  #         diff -B {} -"
-  #         wget http://download.ros.org/schema/package_format3.xsd
-  #         find . -type f -regextype posix-egrep -regex ".*package.xml" -print0 |\
-  #         xargs -0 -I {} -P8 bash -c "xmllint --schema package_format3.xsd --format {} |\
-  #         diff -B {} -"
+  cmake:
+    name: runner / cmake-format
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+      - name: Download config
+        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.cmake-format
+      - name: cmake-format
+        uses: PuneetMatharu/cmake-format-lint-action@868082b20873d65687e64a4807ea342d1844c4c7
+        with:
+          args: -c .cmake-format -i
+      # - name: cmake-format
+      #   run: |
+      #     pip3 install cmake-format
+      #     files=`find . -name '*.cmake' -o -name 'CMakeLists.txt'`
+      #     cmake-format -c .cmake-format -i ${files}
+      - name: suggester / cmake-format
+        uses: reviewdog/action-suggester@v1
+        with:
+          tool_name: cmake-format
+          filter_mode: file
+          fail_on_error: true
   yamllint:
     name: runner / yamllint
     runs-on: ubuntu-18.04
