@@ -158,7 +158,7 @@ jobs:
         run: |
           sudo apt install libxml2-utils
           echo ${{ needs.changes.outputs.xml_files }} |\
-          xargs -I {} bash -c "xmllint --format {} |\
+          xargs -n 1 | xargs -I {} bash -c "xmllint --format {} |\
           diff -B {} - |\
           patch {}"
       - name: suggester / xmllint
