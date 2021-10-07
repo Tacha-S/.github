@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Download config
         run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.clang-format
-      - uses: DoozyX/clang-format-lint-action@v0.12
+      - uses: DoozyX/clang-format-lint-action@2a28e3a8d9553f244243f7e1ff94f6685dff87be # v0.12
         with:
           source: "."
           exclude: ""
@@ -62,7 +62,7 @@ jobs:
           style: file
           inplace: true
       - name: suggester / clang-format
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: clang-format
           filter_mode: file
@@ -80,18 +80,18 @@ jobs:
         with:
           python-version: "2.7"
       - name: autopep8 format
-        uses: peter-evans/autopep8@v1
+        uses: peter-evans/autopep8@1ba8b3249d3cf04922eecd66fc6a024072f4a7b0 # v1.2.1
         with:
           args: --recursive --in-place --aggressive --aggressive --max-line-length 119 .
       - name: suggester / autopep8
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: autopep8
           filter_mode: file
           fail_on_error: true
       - name: flake8 Lint
         if: always()
-        uses: reviewdog/action-flake8@v3
+        uses: reviewdog/action-flake8@49cfab000299623090ddea740bbe30178ef12247 # v3.2.0
         with:
           reporter: github-pr-review
           filter_mode: file
@@ -117,7 +117,7 @@ jobs:
       #     files=`find . -name '*.cmake' -o -name 'CMakeLists.txt'`
       #     cmake-format -c .cmake-format -i ${files}
       - name: suggester / cmake-format
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: cmake-format
           filter_mode: file
@@ -133,7 +133,7 @@ jobs:
       - name: Download config
         run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.yamllint
       - name: yamllint
-        uses: reviewdog/action-yamllint@v1
+        uses: reviewdog/action-yamllint@aabd7aef24430a8da23122ca6711faec445dfcf6 # v1.4.0
         with:
           reporter: github-pr-review
           filter_mode: file
@@ -148,7 +148,7 @@ jobs:
       - name: Check out source repository
         uses: actions/checkout@v2
       - name: Setup reviewdog
-        uses: reviewdog/action-setup@v1
+        uses: reviewdog/action-setup@8f2ec89e6b467ca9175527d2a1641bbd0c05783b # v1.0.3
       - name: xmllint format
         run: |
           sudo apt install libxml2-utils
@@ -157,7 +157,7 @@ jobs:
           diff -B {} - |\
           patch {}"
       - name: suggester / xmllint
-        uses: reviewdog/action-suggester@v1
+        uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: xmllint
           filter_mode: file
