@@ -93,6 +93,7 @@ jobs:
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: autopep8
+          level: error
           filter_mode: file
           fail_on_error: true
       - name: flake8 Lint
@@ -125,6 +126,7 @@ jobs:
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: cmake-format
+          level: error
           filter_mode: file
           fail_on_error: true
   yamllint:
@@ -165,6 +167,7 @@ jobs:
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: xmllint
+          level: error
           filter_mode: file
           fail_on_error: true
       - name: xmllint roslaunch
