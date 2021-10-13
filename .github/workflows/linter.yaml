@@ -162,8 +162,12 @@ jobs:
         run: |
           wget https://gist.githubusercontent.com/nalt/dfa2abc9d2e3ae4feb82ca5608090387/raw/roslaunch.xsd
           files=`echo ${{ needs.changes.outputs.xml_files }} | xargs -n 1 | grep -E ".*launch/.*\.(launch|xml)"`
-          xmllint --noout --schema roslaunch.xsd ${files} 2>&1 1>/dev/null |\
-          reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
+          if [ -z ${files} ]; then
+            echo "There is not launch files."
+          else
+            xmllint --noout --schema roslaunch.xsd ${files} 2>&1 1>/dev/null |\
+            reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
+          fi
       - name: xmllint package.xml
         if: always()
         env:
@@ -171,8 +175,12 @@ jobs:
         run: |
           wget http://download.ros.org/schema/package_format2.xsd
           files=`echo ${{ needs.changes.outputs.xml_files }} | xargs -n 1 | grep -E ".*package.xml"`
-          xmllint --noout --schema package_format2.xsd ${files} 2>&1 1>/dev/null |\
-          reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
+          if [ -z ${files} ]; then
+            echo "There is not package.xml files."
+          else
+            xmllint --noout --schema package_format2.xsd ${files} 2>&1 1>/dev/null |\
+            reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
+          fi
       - name: xmllint format
         run: |
           sudo apt install libxml2-utils
