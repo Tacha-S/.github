@@ -49,6 +49,7 @@ jobs:
         working-directory: ${{ github.workspace }}/ros
       - name: Build ros packages
         run: |
+          apt-get install -y python-catkin-tools
           source /opt/ros/${ROS_DISTRO}/setup.bash
           catkin init
           catkin config --extend /opt/ros/${ROS_DISTRO}
