@@ -47,6 +47,16 @@ jobs:
           rosdep install -iry --from-paths . --rosdistro ${ROS_DISTRO}
         shell: bash
         working-directory: ${{ github.workspace }}/ros
+      - name: Install libfreenect2
+        run: |
+          apt-get install -y build-essential cmake pkg-config libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev
+          git clone https://github.com/OpenKinect/libfreenect2.git
+          cd libfreenect2
+          mkdir build && cd build
+          cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+          make
+          make install
+        working-directory: ${{ github.workspace }}
       - name: Build ros packages
         run: |
           apt-get install -y python-catkin-tools
@@ -55,7 +65,7 @@ jobs:
           catkin config --extend /opt/ros/${ROS_DISTRO}
           catkin config --no-blacklist
           catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          catkin build
+          catkin build -s --no-status
         shell: bash
         working-directory: ${{ github.workspace }}/ros
       - name: Run test
