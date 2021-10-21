@@ -1,0 +1,9 @@
+- name: Install ssh client
+  run: |
+    apt-get update
+    apt-get install -y openssh-client
+- name: setup ssh key
+  uses: shimataro/ssh-key-action@3c9b0fc6f2d223b8450b02a0445f526350fc73e0 # v2.3.1
+  with:
+    key: ${{ inputs.ssh_key }}
+    known_hosts: ${{ inputs.known_hosts }}
