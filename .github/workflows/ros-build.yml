@@ -9,26 +9,24 @@ on:
         required: true
     inputs:
       install_libfreenect2:
-        description: Install libfreenect2 or not
         default: false
         required: false
         type: boolean
       run_test:
-        description: Run rostest or not
         default: true
         required: false
         type: boolean
 
 jobs:
-  build:
-    name: build
+  test:
+    name: Run test
     runs-on: [self-hosted, lab]
     steps:
       - name: Check out source repository
         uses: actions/checkout@v2
         with:
           path: ros/src/${{ github.event.repository.name }}
-      - name: Download repositories managed wstool
+      - name: Download repositories managed by wstool
         run: |
           wstool init .
           files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall"`
@@ -51,12 +49,16 @@ jobs:
         if: inputs.install_libfreenect2
         run: |
           apt-get install -y build-essential cmake pkg-config libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev
-          git clone https://github.com/OpenKinect/libfreenect2.git
-          cd libfreenect2
-          mkdir build && cd build
-          cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
-          make
-          make install
+          if dpkg -l libfreenect2; then
+            echo "Already installed"
+          else
+            git clone https://github.com/OpenKinect/libfreenect2.git
+            cd libfreenect2
+            mkdir build && cd build
+            cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+            make
+            checkinstall -y --pkgname="libfreenect2"
+          fi
         working-directory: ${{ github.workspace }}
       - name: Build ros packages
         run: |
@@ -77,6 +79,3 @@ jobs:
           catkin_test_results --verbose --all build || (trap - ERR && exit 1)
         shell: bash
         working-directory: ${{ github.workspace }}/ros
-      - name: Clenaup workspace
-        if: always()
-        run: rm -rf ${{ github.workspace }}/ros
