@@ -9,7 +9,7 @@ on:
         required: true
     inputs:
       install_libfreenect2:
-        default: true
+        default: false
         required: false
         type: boolean
       run_test:
@@ -20,6 +20,9 @@ on:
         default: ubuntu-latest
         required: false
         type: string
+      setup_script:
+        required: false
+        type: string
 
 jobs:
   build:
@@ -28,6 +31,10 @@ jobs:
     container:
       image: ros:melodic
     steps:
+      - name: Check out source repository
+        uses: actions/checkout@v2
+        with:
+          path: ros/src/${{ github.event.repository.name }}
       - name: Install ssh client
         run: |
           apt-get update
@@ -54,12 +61,19 @@ jobs:
           done
         shell: bash
         working-directory: ${{ github.workspace }}/ros/src
-      # - name: Install rosdep packages
-      #   run: |
-      #     rosdep update
-      #     rosdep install -iry --from-paths . --rosdistro ${ROS_DISTRO}
-      #   shell: bash
-      #   working-directory: ${{ github.workspace }}/ros
+      - name: Install rosdep packages
+        run: |
+          rosdep update
+          rosdep install -iry --from-paths . --rosdistro ${ROS_DISTRO}
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros
+      - name: Run setup script
+        run: |
+          if [ "${{ inputs.setup_script }}" != "" ]; then
+            ./${{ inputs.setup_script }}
+          fi
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
       - name: Install libfreenect2
         if: inputs.install_libfreenect2
         run: |
@@ -75,22 +89,22 @@ jobs:
             checkinstall -y --pkgname="libfreenect2"
           fi
         working-directory: ${{ github.workspace }}
-      # - name: Build ros packages
-      #   run: |
-      #     apt-get install -y python-catkin-tools
-      #     source /opt/ros/${ROS_DISTRO}/setup.bash
-      #     catkin init
-      #     catkin config --extend /opt/ros/${ROS_DISTRO}
-      #     catkin config --no-blacklist
-      #     catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-      #     catkin build -s --no-status
-      #   shell: bash
-      #   working-directory: ${{ github.workspace }}/ros
-      # - name: Run test
-      #   if: inputs.run_test
-      #   run: |
-      #     source devel/setup.bash
-      #     catkin run_tests -i --no-deps --no-status ${{ github.event.repository.name }}
-      #     catkin_test_results --verbose --all build || (trap - ERR && exit 1)
-      #   shell: bash
-      #   working-directory: ${{ github.workspace }}/ros
+      - name: Build ros packages
+        run: |
+          apt-get install -y python-catkin-tools
+          source /opt/ros/${ROS_DISTRO}/setup.bash
+          catkin init
+          catkin config --extend /opt/ros/${ROS_DISTRO}
+          catkin config --no-blacklist
+          catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          catkin build -s --no-status
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros
+      - name: Run test
+        if: inputs.run_test
+        run: |
+          source devel/setup.bash
+          catkin run_tests -i --no-deps --no-status ${{ github.event.repository.name }}
+          catkin_test_results --verbose --all build || (trap - ERR && exit 1)
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros
