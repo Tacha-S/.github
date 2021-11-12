@@ -1,0 +1,6 @@
+[catkin_lint]
+quiet = yes
+
+[*]
+uninstalled_script = ignore
+
