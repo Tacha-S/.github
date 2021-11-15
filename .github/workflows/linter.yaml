@@ -197,18 +197,3 @@ jobs:
           level: error
           filter_mode: file
           fail_on_error: true
-  catkin:
-    name: runner / catkin lint
-    runs-on: ubuntu-18.04
-    steps:
-      - name: Check out source repository
-        uses: actions/checkout@v2
-      - name: Setup reviewdog
-        uses: reviewdog/action-setup@8f2ec89e6b467ca9175527d2a1641bbd0c05783b # v1.0.3
-      - name: Download config
-        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.catkin_lint
-      - name: catkin lint
-        run: |
-          pip3 install catkin_lint
-          catkin_lint --config .catkin_lint |\
-          reviewdog -name="catkin lint" -reporter=github-pr-review -efm=':%f(%l):%m' -filter-mode=file -fail-on-error

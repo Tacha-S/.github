@@ -1,26 +1,22 @@
-name: ros-build
+name: ros-test
 
 on:
   workflow_call:
-    secrets:
-      ssh_key:
-        required: true
-      known_hosts:
-        required: true
     inputs:
       install_libfreenect2:
         default: false
         required: false
         type: boolean
-      run_test:
-        default: true
+      setup_script:
         required: false
-        type: boolean
+        type: string
 
 jobs:
   test:
     name: Run test
     runs-on: [self-hosted, lab]
+    env:
+      ROS_DISTRO: melodic
     steps:
       - name: Check out source repository
         uses: actions/checkout@v2
@@ -28,7 +24,9 @@ jobs:
           path: ros/src/${{ github.event.repository.name }}
       - name: Download repositories managed by wstool
         run: |
-          wstool init .
+          if [ ! -e .rosinstall ]; then
+            wstool init .
+          fi
           files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall"`
           while [ `echo ${files} | wc -w` -gt 0 ]
           do
@@ -45,10 +43,17 @@ jobs:
           rosdep install -iry --from-paths . --rosdistro ${ROS_DISTRO}
         shell: bash
         working-directory: ${{ github.workspace }}/ros
+      - name: Run setup script
+        run: |
+          if [ "${{ inputs.setup_script }}" != "" ]; then
+            ./${{ inputs.setup_script }}
+          fi
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
       - name: Install libfreenect2
         if: inputs.install_libfreenect2
         run: |
-          apt-get install -y build-essential cmake pkg-config libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev
+          sudo apt-get install -y build-essential cmake pkg-config libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev checkinstall
           if dpkg -l libfreenect2; then
             echo "Already installed"
           else
@@ -62,7 +67,7 @@ jobs:
         working-directory: ${{ github.workspace }}
       - name: Build ros packages
         run: |
-          apt-get install -y python-catkin-tools
+          sudo apt-get install -y python-catkin-tools
           source /opt/ros/${ROS_DISTRO}/setup.bash
           catkin init
           catkin config --extend /opt/ros/${ROS_DISTRO}
@@ -72,10 +77,50 @@ jobs:
         shell: bash
         working-directory: ${{ github.workspace }}/ros
       - name: Run test
-        if: inputs.run_test
         run: |
           source devel/setup.bash
           catkin run_tests -i --no-deps --no-status ${{ github.event.repository.name }}
           catkin_test_results --verbose --all build || (trap - ERR && exit 1)
         shell: bash
         working-directory: ${{ github.workspace }}/ros
+
+  lint_after_build:
+    name: Lint after build
+    runs-on: [self-hosted, lab]
+    needs: [changes, test]
+    env:
+      ROS_DISTRO: melodic
+    steps:
+      - name: Setup reviewdog
+        uses: reviewdog/action-setup@8f2ec89e6b467ca9175527d2a1641bbd0c05783b # v1.0.3
+      - name: Download catkin lint config
+        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.catkin_lint -O .catkin_lint
+        working-directory: ${{ github.workspace }}/ros
+      - name: catkin lint
+        run: |
+          pip3 install catkin_lint
+          catkin_lint |\
+          reviewdog -name="catkin_lint" -reporter=github-pr-review -efm='%.%+: %f: %t%.%+: %m'\
+          -efm='%.%+: %f(%l): %t%.%+: %m' -filter-mode=file -fail-on-error
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
+      - name: Download clang tidy config
+        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.clang-tidy -O .clang-tidy
+        working-directory: ${{ github.workspace }}/ros
+      - name: clang-tidy
+        if: needs.changes.outputs.cpp == 'true'
+        run: |
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
+          sudo add-apt-repository -y\
+          "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-13 main"
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy-13
+          pip3 install compdb
+          cat ../../build/*/**/compile_commands.json > ../../build/compile_commands.json
+          sed -i -e ':a;N;$!ba;s/\]\n*\[/,/g' ../../build/compile_commands.json
+          compdb -p ../../build list > ../../compile_commands.json
+          clang-tidy-13 --quiet ${{ needs.changes.outputs.cpp_files }} |\
+          reviewdog -name="clang-tidy" -reporter=github-pr-review -efm='%E%f:%l:%c: %t%.%#: %m'\
+          -efm='%C%m' -filter-mode=file -fail-on-error
+        shell: bash
+        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
