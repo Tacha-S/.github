@@ -1,4 +1,4 @@
-name: lint-test
+name: linter
 
 on:
   workflow_call:
@@ -6,7 +6,8 @@ on:
 jobs:
   changes:
     name: changes
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
+    timeout-minutes: 1
     outputs:
       cpp: ${{ steps.changes.outputs.cpp }}
       cpp_files: ${{ steps.changes.outputs.cpp_files }}
@@ -21,37 +22,40 @@ jobs:
     steps:
       - name: Check out source repository
         uses: actions/checkout@v2
-      - name: changes
+      - name: changed-file-filter
         id: changes
-        uses: dorny/paths-filter@b2feaf19c27470162a626bd6fa8438ae5b263721 #v2.10.2
+        uses: dorny/paths-filter@b2feaf19c27470162a626bd6fa8438ae5b263721 # v2.10.2
         with:
           filters: |
             cpp:
-              - '**.h'
-              - '**.hpp'
-              - '**.hh'
-              - '**.hxx'
-              - '**.c'
-              - '**.cpp'
-              - '**.cc'
-              - '**.cxx'
+              - added|modified: '**.h'
+              - added|modified: '**.hpp'
+              - added|modified: '**.hh'
+              - added|modified: '**.hxx'
+              - added|modified: '**.c'
+              - added|modified: '**.cpp'
+              - added|modified: '**.cc'
+              - added|modified: '**.cxx'
             python:
-              - '**.py'
+              - added|modified: '**.py'
             cmake:
-              - '**/CMakeLists.txt'
-              - '**.cmake'
+              - added|modified: '**/CMakeLists.txt'
+              - added|modified: '**.cmake'
             yaml:
-              - '**.yaml'
-              - '**.yml'
+              - added|modified: '**.yaml'
+              - added|modified: '**.yml'
             xml:
-              - '**/launch/*(*/)*.launch'
-              - '**/launch/*(*/)*.xml'
-              - '**/package.xml'
+              - added|modified: '**/launch/*(*/)*.launch'
+              - added|modified: '**/launch/*(*/)*.xml'
+              - added|modified: '**/package.xml'
+              - added|modified: '**.xacro'
+              - added|modified: '**.urdf'
           list-files: "shell"
 
   clang:
     name: runner / c++
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
     needs: changes
     if: needs.changes.outputs.cpp == 'true'
     steps:
@@ -63,7 +67,7 @@ jobs:
         with:
           source: ${{ needs.changes.outputs.cpp_files }}
           exclude: ""
-          extensions: "h,cpp,hpp"
+          extensions: "h,hpp,hh,hxx,c,cpp,cc,cxx"
           clangFormatVersion: 8
           style: file
           inplace: true
@@ -73,40 +77,56 @@ jobs:
           tool_name: clang-format
           filter_mode: file
           fail_on_error: true
-  python-lint:
+  python:
     name: runner / python
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
     needs: changes
     if: needs.changes.outputs.python == 'true'
     steps:
       - name: Check out source repository
         uses: actions/checkout@v2
-      - name: Set up Python environment
+      - name: Set up Python3 environment
         uses: actions/setup-python@v2
         with:
-          python-version: "2.7"
+          python-version: "3.8"
+      - name: Download config
+        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/setup.cfg
       - name: autopep8 format
         uses: peter-evans/autopep8@1ba8b3249d3cf04922eecd66fc6a024072f4a7b0 # v1.2.1
         with:
-          args: -iaa --max-line-length 119 ${{ needs.changes.outputs.python_files }}
+          args: -i ${{ needs.changes.outputs.python_files }}
       - name: suggester / autopep8
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: autopep8
-          level: error
           filter_mode: file
           fail_on_error: true
-      - name: flake8 Lint
-        if: always()
-        uses: reviewdog/action-flake8@49cfab000299623090ddea740bbe30178ef12247 # v3.2.0
+      - name: Setup reviewdog
+        uses: reviewdog/action-setup@8f2ec89e6b467ca9175527d2a1641bbd0c05783b # v1.0.3
+      - name: flake8 lint
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        run: |
+          pip3 install pep8-naming flake8-coding flake8-docstrings
+          file_list="${{ needs.changes.outputs.python_files }}"
+          flake8 --accept-encodings=utf-8 ${file_list} |\
+          reviewdog -name="flake8" -reporter=github-pr-review -efm='%f:%l:%c: %.%n %m' -filter-mode=file -fail-on-error
+      - name: isort # ref #53
+        run: |
+          pip3 install isort
+          file_list="${{ needs.changes.outputs.python_files }}"
+          isort ${file_list}
+      - name: suggester / isort
+        uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
-          reporter: github-pr-review
+          tool_name: isort
           filter_mode: file
           fail_on_error: true
-          flake8_args: --ignore=F401,W503 --max-line-length 119 ${{ needs.changes.outputs.python_files }}
   cmake:
     name: runner / cmake-format
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
     needs: changes
     if: needs.changes.outputs.cmake == 'true'
     steps:
@@ -114,10 +134,6 @@ jobs:
         uses: actions/checkout@v2
       - name: Download config
         run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.cmake-format
-      # - name: cmake-format
-      #   uses: PuneetMatharu/cmake-format-lint-action@868082b20873d65687e64a4807ea342d1844c4c7
-      #   with:
-      #     args: -c .cmake-format -i
       - name: cmake-format
         run: |
           pip3 install cmake-format
@@ -126,12 +142,12 @@ jobs:
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: cmake-format
-          level: error
           filter_mode: file
           fail_on_error: true
   yamllint:
     name: runner / yamllint
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
     needs: changes
     if: needs.changes.outputs.yaml == 'true'
     steps:
@@ -140,15 +156,16 @@ jobs:
       - name: Download config
         run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.yamllint
       - name: yamllint
-        uses: reviewdog/action-yamllint@aabd7aef24430a8da23122ca6711faec445dfcf6 # v1.4.0
+        uses: reviewdog/action-yamllint@efeccedfc67c3b74c89e233cd61c8133784b82e0 # v1.5.1
         with:
           reporter: github-pr-review
           filter_mode: file
           fail_on_error: true
-          yamllint_flags: -c .yamllint ${{ needs.changes.outputs.yaml_files }}
-  xmllint:
-    name: runner / xmllint
-    runs-on: ubuntu-18.04
+          yamllint_flags: -s -c .yamllint ${{ needs.changes.outputs.yaml_files }}
+  xml:
+    name: runner / xml
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
     needs: changes
     if: needs.changes.outputs.xml == 'true'
     steps:
@@ -160,13 +177,13 @@ jobs:
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
+          sudo apt update
           sudo apt install libxml2-utils
           wget https://gist.githubusercontent.com/nalt/dfa2abc9d2e3ae4feb82ca5608090387/raw/roslaunch.xsd
-          file_list=${{ needs.changes.outputs.xml_files }}
-          echo ${file_list}
+          file_list="${{ needs.changes.outputs.xml_files }}"
           files=`echo ${file_list} | xargs -n 1 | grep -E ".*launch/.*\.(launch|xml)" || true`
           if [ -z ${files} ]; then
-            echo "There is not launch files."
+            echo "There are no launch files."
           else
             xmllint --noout --schema roslaunch.xsd ${files} 2>&1 1>/dev/null |\
             reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
@@ -176,12 +193,19 @@ jobs:
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
         run: |
-          wget http://download.ros.org/schema/package_format2.xsd
           files=`echo ${{ needs.changes.outputs.xml_files }} | xargs -n 1 | grep -E ".*package.xml" || true`
           if [ -z ${files} ]; then
-            echo "There is not package.xml files."
+            echo "There are no package.xml files."
           else
-            xmllint --noout --schema package_format2.xsd ${files} 2>&1 1>/dev/null |\
+            wget http://download.ros.org/schema/package_format2.xsd
+            wget http://download.ros.org/schema/package_format3.xsd
+            lint_result=/tmp/xmllint
+            for file in ${files}
+            do
+              format_version=`cat $file | sed -En 's/<package format="(.*)">/\1/p'`
+              xmllint --noout --schema package_format${format_version}.xsd $file 2>>${lint_result} | true
+            done
+            cat ${lint_result} |\
             reviewdog -name="xmllint" -reporter=github-pr-review -efm='%f:%l:%m' -filter-mode=file -fail-on-error
           fi
       - name: xmllint format
@@ -194,6 +218,5 @@ jobs:
         uses: reviewdog/action-suggester@1b18099af6c3c023256eb87a27aab5623e9b934d # v1.3.0
         with:
           tool_name: xmllint
-          level: error
           filter_mode: file
           fail_on_error: true
