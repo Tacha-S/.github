@@ -1,48 +1,109 @@
-name: ros-test
+name: ros-build
 
 on:
   workflow_call:
+    secrets:
+      ssh_key:
+        required: true
+      known_hosts:
+        required: true
     inputs:
-      install_libfreenect2:
-        default: false
+      package_name:
+        default: ${{ github.event.repository.name }}
+        required: false
+        type: string
+      run_test:
+        default: true
         required: false
         type: boolean
+      runs_on:
+        default: ubuntu-latest
+        required: false
+        type: string
       setup_script:
         required: false
         type: string
+      ignore_rosinstalls:
+        default: ""
+        required: false
+        type: string
+        description: "Specify relative paths from /path/to/workspace/src as in
+          ./ros-package/.rosinstall, separated by commas."
 
 jobs:
-  test:
-    name: Run test
-    runs-on: [self-hosted, lab]
-    env:
-      ROS_DISTRO: melodic
+  build:
+    name: Build
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 60
+    container:
+      image: ros:noetic
     steps:
+      - name: Install necessary apt packages
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-client keyboard-configuration python3-pip
+        timeout-minutes: 1
+      - name: setup ssh key
+        uses: shimataro/ssh-key-action@3c9b0fc6f2d223b8450b02a0445f526350fc73e0 # v2.3.1
+        with:
+          key: ${{ secrets.ssh_key }}
+          known_hosts: ${{ secrets.known_hosts }}
+        timeout-minutes: 1
+      - name: Update git version
+        run: |
+          apt-get install -y software-properties-common
+          add-apt-repository -y ppa:git-core/ppa
+          apt-get update
+          apt-get install git -y
+        shell: bash
       - name: Check out source repository
         uses: actions/checkout@v2
         with:
           path: ros/src/${{ github.event.repository.name }}
-      - name: Download repositories managed by wstool
+          submodules: recursive
+        timeout-minutes: 1
+      - name: Download repositories managed by vcstool
         run: |
-          if [ ! -e .rosinstall ]; then
-            wstool init .
+          if !(type vcs > /dev/null 2>&1); then
+              apt update && apt install -y python3-vcstool git
           fi
-          files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall"`
-          while [ `echo ${files} | wc -w` -gt 0 ]
+
+          not_contains() {
+              [[ $1 =~ (^|[[:space:]])$2($|[[:space:]]) ]] && exit 1 || exit 0
+          }
+
+          IFS=', ' read -ra ignore_files <<< "${{ inputs.ignore_rosinstalls }}"
+          files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall" | sort`
+          pre_n=0
+          n=`echo ${files} | wc -w`
+          while [ `comm -3 <(echo ${files}) <(echo ${ignore_files[@]} | sort) | wc -w` -ne 0 -a ${n} -ne ${pre_n} ]
           do
-            echo ${files} | xargs -n1 wstool merge -y -t .
-            wstool up -t . -j4 -v
-            rm ${files}
-            files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall"`
+              for f in ${files}
+              do
+                  if `not_contains ${f} ${ignore_files}`; then
+                      vcs import --recursive --debug < ${f}
+                      ignore_files+=(${f})
+                  fi
+              done
+              files=`find . -type f -regextype posix-egrep -regex "\./.+\.rosinstall" | sort`
+              pre_n=${n}
+              n=`echo ${files} | wc -w`
           done
         shell: bash
         working-directory: ${{ github.workspace }}/ros/src
+        timeout-minutes: 5
       - name: Install rosdep packages
         run: |
           rosdep update
           rosdep install -iry --from-paths . --rosdistro ${ROS_DISTRO}
         shell: bash
         working-directory: ${{ github.workspace }}/ros
+        timeout-minutes: 15
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@1ed7eb5b4b2afeceab143d0caa0d7fa87c33047b # v1.0.5
+        with:
+          max-size: 100M
+        timeout-minutes: 1
       - name: Run setup script
         run: |
           if [ "${{ inputs.setup_script }}" != "" ]; then
@@ -50,77 +111,32 @@ jobs:
           fi
         shell: bash
         working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
-      - name: Install libfreenect2
-        if: inputs.install_libfreenect2
-        run: |
-          sudo apt-get install -y build-essential cmake pkg-config libusb-1.0-0-dev libturbojpeg0-dev libglfw3-dev checkinstall
-          if dpkg -l libfreenect2; then
-            echo "Already installed"
-          else
-            git clone https://github.com/OpenKinect/libfreenect2.git
-            cd libfreenect2
-            mkdir build && cd build
-            cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
-            make
-            checkinstall -y --pkgname="libfreenect2"
-          fi
-        working-directory: ${{ github.workspace }}
+        timeout-minutes: 30
       - name: Build ros packages
         run: |
-          sudo apt-get install -y python-catkin-tools
+          if [ `find src/${{ github.event.repository.name }} -name CMakeLists.txt | wc -l` -eq 0 ]; then
+            exit 0
+          fi
+          apt-get install -y python3-catkin-tools
           source /opt/ros/${ROS_DISTRO}/setup.bash
+          export PATH="/usr/lib/ccache:$PATH"
           catkin init
           catkin config --extend /opt/ros/${ROS_DISTRO}
           catkin config --no-blacklist
           catkin config --cmake-args -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          catkin build -s --no-status
+          catkin build -s --no-status ${{ inputs.package_name }}
         shell: bash
         working-directory: ${{ github.workspace }}/ros
+        timeout-minutes: 30
       - name: Run test
+        if: inputs.run_test
         run: |
+          if [ `find src/${{ github.event.repository.name }} -name CMakeLists.txt | wc -l` -eq 0 ]; then
+            exit 0
+          fi
           source devel/setup.bash
-          catkin run_tests -i --no-deps --no-status ${{ github.event.repository.name }}
+          catkin run_tests -i --no-deps --no-status ${{ inputs.package_name }}
           catkin_test_results --verbose --all build || (trap - ERR && exit 1)
         shell: bash
         working-directory: ${{ github.workspace }}/ros
-
-  lint_after_build:
-    name: Lint after build
-    runs-on: [self-hosted, lab]
-    needs: [changes, test]
-    env:
-      ROS_DISTRO: melodic
-    steps:
-      - name: Setup reviewdog
-        uses: reviewdog/action-setup@8f2ec89e6b467ca9175527d2a1641bbd0c05783b # v1.0.3
-      - name: Download catkin lint config
-        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.catkin_lint -O .catkin_lint
-        working-directory: ${{ github.workspace }}/ros
-      - name: catkin lint
-        run: |
-          pip3 install catkin_lint
-          catkin_lint |\
-          reviewdog -name="catkin_lint" -reporter=github-pr-review -efm='%.%+: %f: %t%.%+: %m'\
-          -efm='%.%+: %f(%l): %t%.%+: %m' -filter-mode=file -fail-on-error
-        shell: bash
-        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
-      - name: Download clang tidy config
-        run: wget https://raw.githubusercontent.com/Tacha-S/.github/main/.clang-tidy -O .clang-tidy
-        working-directory: ${{ github.workspace }}/ros
-      - name: clang-tidy
-        if: needs.changes.outputs.cpp == 'true'
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
-          sudo add-apt-repository -y\
-          "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-13 main"
-          sudo apt-get update
-          sudo apt-get install -y clang-tidy-13
-          pip3 install compdb
-          cat ../../build/*/**/compile_commands.json > ../../build/compile_commands.json
-          sed -i -e ':a;N;$!ba;s/\]\n*\[/,/g' ../../build/compile_commands.json
-          compdb -p ../../build list > ../../compile_commands.json
-          clang-tidy-13 --quiet ${{ needs.changes.outputs.cpp_files }} |\
-          reviewdog -name="clang-tidy" -reporter=github-pr-review -efm='%E%f:%l:%c: %t%.%#: %m'\
-          -efm='%C%m' -filter-mode=file -fail-on-error
-        shell: bash
-        working-directory: ${{ github.workspace }}/ros/src/${{ github.event.repository.name }}
+        timeout-minutes: 30
